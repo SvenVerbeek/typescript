@@ -575,54 +575,31 @@ function hmrAccept(bundle /*: ParcelRequire */ , id /*: string */ ) {
 
 },{}],"h7u1C":[function(require,module,exports) {
 var _user = require("./models/User");
-const user = new (0, _user.User)({
-    name: "Piet"
+const user = (0, _user.User).buildUser({
+    id: 1
 });
 //user.set({name: 'new', age: 20});
-user.save();
+user.on("change", ()=>{
+    console.log(user);
+});
+user.fetch();
 
 },{"./models/User":"4rcHn"}],"4rcHn":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 parcelHelpers.export(exports, "User", ()=>User);
-var _axios = require("axios");
-var _axiosDefault = parcelHelpers.interopDefault(_axios);
-class User {
-    constructor(data){
-        this.data = data;
-        this.events = {};
-    }
-    get(propName) {
-        return this.data[propName];
-    }
-    set(update) {
-        Object.assign(this.data, update);
-    }
-    on(event, callback) {
-        const handlers = this.events[event] || [];
-        handlers.push(callback);
-        this.events[event] = handlers;
-    }
-    trigger(event) {
-        const handlers = this.events[event];
-        if (!handlers || handlers.length === 0) return;
-        handlers.forEach((callback)=>{
-            callback();
-        });
-    }
-    fetch() {
-        (0, _axiosDefault.default).get(`http://localhost:3000/users/${this.get("id")}`).then((response)=>{
-            this.set(response.data);
-        });
-    }
-    save() {
-        const id = this.get("id");
-        if (id) (0, _axiosDefault.default).put(`http://localhost:3000/users/${id}`, this.data);
-        else (0, _axiosDefault.default).post("http://localhost:3000/users", this.data);
+var _models = require("./Models");
+var _attributes = require("./Attributes");
+var _apiSync = require("./ApiSync");
+var _eventing = require("./Eventing");
+const rootUrl = "http://localhost:3000/users";
+class User extends (0, _models.Model) {
+    static buildUser(attrs) {
+        return new User(new (0, _attributes.Attributes)(attrs), new (0, _eventing.Eventing)(), new (0, _apiSync.ApiSync)(rootUrl));
     }
 }
 
-},{"@parcel/transformer-js/src/esmodule-helpers.js":"8lIYV","axios":"jo6P5"}],"8lIYV":[function(require,module,exports) {
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"8lIYV","./Models":"vnulo","./Attributes":"6Bbds","./Eventing":"7459s","./ApiSync":"3wylh"}],"8lIYV":[function(require,module,exports) {
 exports.interopDefault = function(a) {
     return a && a.__esModule ? a : {
         default: a
@@ -652,7 +629,112 @@ exports.export = function(dest, destName, get) {
     });
 };
 
-},{}],"jo6P5":[function(require,module,exports) {
+},{}],"vnulo":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "Model", ()=>Model);
+class Model {
+    constructor(attributes, events, sync){
+        this.attributes = attributes;
+        this.events = events;
+        this.sync = sync;
+    }
+    //same as
+    // on = this.events.on;
+    // trigger = this.events.trigger;
+    // get = this.attributes.get;
+    get on() {
+        return this.events.on;
+    }
+    get trigger() {
+        return this.events.trigger;
+    }
+    get get() {
+        return this.attributes.get;
+    }
+    set(update) {
+        this.attributes.set(update);
+        this.events.trigger("change");
+    }
+    fetch() {
+        const id = this.get("id");
+        if (typeof id !== "number") throw new Error("Can't fetch without id");
+        this.sync.fetch(id).then((response)=>{
+            this.set(response.data);
+        });
+    }
+    save() {
+        this.sync.save(this.attributes.getAll()).then((reponse)=>{
+            this.trigger("save");
+        }).catch(()=>{
+            this.trigger("error");
+        });
+    }
+}
+
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"8lIYV"}],"6Bbds":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "Attributes", ()=>Attributes);
+class Attributes {
+    constructor(data){
+        this.data = data;
+        this.get = (key)=>{
+            return this.data[key];
+        };
+    }
+    getAll() {
+        return this.data;
+    }
+    set(update) {
+        Object.assign(this.data, update);
+    }
+}
+
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"8lIYV"}],"7459s":[function(require,module,exports) {
+// Type alias for event
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "Eventing", ()=>Eventing);
+class Eventing {
+    constructor(){
+        this.events = {};
+        this.on = (event, callback)=>{
+            const handlers = this.events[event] || [];
+            handlers.push(callback);
+            this.events[event] = handlers;
+        };
+        this.trigger = (event)=>{
+            const handlers = this.events[event];
+            if (!handlers || handlers.length === 0) return;
+            handlers.forEach((callback)=>{
+                callback();
+            });
+        };
+    }
+}
+
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"8lIYV"}],"3wylh":[function(require,module,exports) {
+var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "ApiSync", ()=>ApiSync);
+var _axios = require("axios");
+var _axiosDefault = parcelHelpers.interopDefault(_axios);
+class ApiSync {
+    constructor(rootUrl){
+        this.rootUrl = rootUrl;
+    }
+    fetch(id) {
+        return (0, _axiosDefault.default).get(`${this.rootUrl}/${id}`);
+    }
+    save(data) {
+        const { id } = data;
+        if (id) return (0, _axiosDefault.default).put(`${this.rootUrl}/${id}`, data);
+        else return (0, _axiosDefault.default).post(this.rootUrl, data);
+    }
+}
+
+},{"axios":"jo6P5","@parcel/transformer-js/src/esmodule-helpers.js":"8lIYV"}],"jo6P5":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 parcelHelpers.export(exports, "default", ()=>(0, _axiosJsDefault.default));
